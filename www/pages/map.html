@@ -1,0 +1,191 @@
+<template>
+  <!--
+  この部分はHTMLテンプレートで、地図を表示するための<div>タグを定義しています。
+  -->
+  <div class="page" data-name="map">
+    <div id="map"></div>
+  </div>
+</template>
+
+<style>
+  /* 
+  この部分はCSSスタイルシートで、地図やマーカーの表示スタイルを定義しています。
+  地図の表示エリアを画面全体に広げて、マーカーの背景色、境界線、パディング、角丸、幅を設定しています。
+  */
+  #map {
+    width: 100%;
+    height: 100%;
+  }
+  .marker {
+    background-color: white;
+    border: 1px solid black;
+    padding: 5px;
+    border-radius: 5px;
+    width: 100%;
+  }
+</style>
+
+<script>
+  /* 
+  この部分はJavaScriptで、地図の操作や表示に関する詳細な設定を行っています。
+  */
+  export default (props, { $f7route, $store, $on, $f7router }) => {
+    let map; // 変数mapに地図の情報が格納されます。
+    const { lat, lng } = $store.getters.coords.value; // 現在の座標を取得します。
+
+    // 地図を初期化する関数を定義します。
+    const initMap = () => {
+      // マーカーを表示するためのレイヤーを作成します。
+      const markerLayer = new ol.layer.Vector({
+        source: new ol.source.Vector(),
+      });
+
+      // 地図を作成し、地図とマーカーのレイヤーを設定します。また、初期の中心座標とズームレベルを設定します。
+      map = new ol.Map({
+        target: 'map',
+        layers: [
+            new ol.layer.Tile({
+            source: new ol.source.OSM(),
+          }),
+          markerLayer,
+        ],
+        view: new ol.View({
+          center: ol.proj.fromLonLat([ lng, lat]), // 東京タワーの位置情報
+          zoom: 14,
+        })
+      });
+      
+      // 地図をクリックしたときのイベントを設定します。
+      map.on('click', mapClick);
+
+      // 地図の中心が変わったときのイベントを設定します。
+      const view = map.getView();
+      view.on('change:center', (e) => {
+        const [lng, lat] = ol.proj.toLonLat(view.getCenter());
+        $store.dispatch('setCoords', { lat, lng });
+      });
+    };
+
+    // ページが表示されたときに地図を初期化します。
+    $on('page:mounted', initMap);
+
+    // ページが表示された後にノートをロードし、マーカーを追加します。
+    $on('page:afterin', async () => {
+      // ノートをロードします。
+      const notes = await loadNotes();
+      // ストア内のノートをリセットします。
+      $store.dispatch('resetNote');
+      // 取得したノートを使って、マーカーを追加します。
+      notes.forEach(addMarker);
+    });
+
+    // 地図をクリックしたときの関数を定義します。クリックした場所にマーカーを追加したり、ツールチップを表示したりします。
+    const mapClick = (e) => {
+      // クリックした場所のピクセル情報を取得します。
+      const pixel = map.getEventPixel(e.originalEvent);
+
+      // ピクセル情報から、マーカーが存在するかどうかを判定します。
+      const target = map.forEachFeatureAtPixel(pixel, function(feature, layer) {
+        return feature;
+      });
+
+      // クリックした場所にマーカーがあれば、そのマーカーに関連するツールチップを表示します。
+      if (target) {
+        return showTooltip(e.coordinate, target.note);
+      }
+
+      // マーカーがなく、すでに表示されているツールチップがあれば、そのツールチップを非表示にします。
+      if ($('.marker').length > 0) {
+        return hideTooltip();
+      }
+
+      // マーカーがなく、ツールチップも表示されていない場合、新たなマーカーを追加します。
+      const [ lng, lat ] = ol.proj.toLonLat(e.coordinate);
+      const path = `/note/${lat}/${lng}/`;
+      $f7router.navigate(path);
+    };
+
+    // ノートに基づいてマーカーを追加する関数を定義します。
+    const addMarker = async (note) => {
+      // ノートの座標を取得します。
+      const geo = note.get('geo');
+      const coordinate = ol.proj.fromLonLat([geo.longitude, geo.latitude]);
+
+      // ノートの画像をダウンロードします。
+      const file = await ncmb.File.download(note.get('image'), 'blob');
+      note.blob = file;
+      $store.dispatch('addNote', note);
+
+      // 画像のサイズを調整します。
+      const image = await resizeImage(file, 40);
+      const src = URL.createObjectURL(image);
+
+      // マーカーのスタイルを設定します。
+      const markerStyle = new ol.style.Style({
+        image: new ol.style.Icon({
+          anchor: [0, 0],
+          size: [40, 40],
+          src,
+        }),
+      });
+
+      // マーカーを作成し、地図に追加します。
+      const marker = new ol.Feature({
+        geometry: new ol.geom.Point(coordinate),
+      });
+      marker.note = note;
+      marker.setStyle(markerStyle);
+      map.getLayers().getArray()[1].getSource().addFeature(marker);
+    }
+
+    // 中心座標の周辺3km以内のノートを取得する関数を定義します。
+    const loadNotes = async () => {
+      const Note = ncmb.DataStore('Note');
+      const center = map.getView().getCenter();
+      const [lng, lat] = ol.proj.toLonLat(center);
+      const geo = new ncmb.GeoPoint(lat, lng);
+      return Note
+        .withinKilometers("geo", geo, 3)
+        .fetchAll();
+    };
+
+    // ツールチップを表示する関数を定義します。
+    const showTooltip = async (coordinate, note) => {
+      hideTooltip(); // 既存のツールチップを非表示にします。
+
+      // ツールチップに表示する画像を調整します。
+      const image = await resizeImage(note.blob, 200);
+
+      // ツールチップの要素を作成し、内容を設定します。
+      const tooltip = document.createElement('div');
+      tooltip.className = 'marker';
+      tooltip.innerHTML = `
+      <strong>${note.get('address')}付近のメモ</strong>
+      <p>${note.get('text')}</p>
+      <div>
+        <img src="${URL.createObjectURL(image)}" width="100%" />
+      </div>
+      `;
+
+      // ツールチップを地図に追加します。
+      document.querySelector('#view-map').appendChild(tooltip);
+
+      // ツールチップの位置を設定します。
+      const tooltipOverlay = new ol.Overlay({
+        element: tooltip,
+        offset: [-20, -20],
+      });
+      map.addOverlay(tooltipOverlay);
+      tooltipOverlay.setPosition(coordinate);
+    };
+
+    // ツールチップを非表示にする関数を定義します。
+    const hideTooltip = () => {
+      const tooltip = document.querySelector('.marker');
+      if (tooltip) {
+        tooltip.parentNode.removeChild(tooltip);
+      }
+    };
+    return $render; // 最終的にレンダリングを行います。
+  };
+</script>

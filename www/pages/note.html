@@ -1,0 +1,160 @@
+<template>
+  <!-- ページ全体のレイアウトを定義する部分 -->
+  <div class="page" data-name="product">
+    
+    <!-- ナビゲーションバーを定義する部分 -->
+    <div class="navbar">
+      <!-- ナビゲーションバーの背景を定義する部分 -->
+      <div class="navbar-bg"></div>
+      <!-- ナビゲーションバーの内側を定義する部分 -->
+      <div class="navbar-inner sliding">
+        <!-- ナビゲーションバーの左側を定義する部分。ここでは戻るボタンが設置されている -->
+        <div class="left">
+          <a href="#" class="link back">
+            <i class="icon icon-back"></i>
+            <span class="if-not-md">戻る</span>
+          </a>
+        </div>
+        <!-- ナビゲーションバーのタイトルを定義する部分。ここでは新規メモと表示されている -->
+        <div class="title">新規メモ</div>
+      </div>
+    </div>
+    
+    <!-- ページの主要なコンテンツを定義する部分 -->
+    <div class="page-content">
+      <!-- メモのタイトルを定義する部分。アドレス付近のメモと表示される -->
+      <div class="block-title">${page.address}付近のメモ</div>
+      <!-- メモの内容を入力する部分を定義するフォーム -->
+      <div class="block block-strong">
+        <!-- メモと画像を入力するためのフォーム -->
+        <form class="note list" @submit="${submit}">
+          <ul>
+            <!-- メモ入力部分 -->
+            <li>
+              <div class="item-content item-input">
+                <div class="item-inner">
+                  <div class="item-title item-label">メモ</div>
+                  <div class="item-input-wrap">
+                    <textarea class="resizable"></textarea>
+                  </div>
+                </div>
+              </div>
+            </li>
+            <!-- 画像選択部分 -->
+            <li>
+              <div class="item-content item-input">
+                <div class="item-inner">
+                  <div class="item-title item-label">画像</div>
+                  <div class="item-input-wrap">
+                    <!-- すでに選択されている画像があれば表示、なければ画像選択アイコンを表示 -->
+                    ${page.image ?
+                      $h`<img src="${page.image}" width="100%"  @click="${select}" />`
+                      :
+                      $h`<i class="f7-icons" @click="${select}">photo</i>`
+                    }
+                    <span class="image-wrap">
+                      <!-- 画像ファイル選択のためのinput要素。デフォルトでは表示されていません -->
+                      <input type="file" name="file" accept="image/*" @change="${change}" />
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </li>
+            <!-- 保存ボタン -->
+            <button class="button col" @click=${submit}>保存</button>
+          </ul>
+        </form>
+      </div>
+    </div>
+  </div>
+</template>
+
+<!-- スタイルシート。画像ファイル選択のinput要素を非表示に設定しています -->
+<style>
+  .image-wrap {
+    display: none;
+  }
+</style>
+
+<!-- スクリプト部分。ページの動作を定義しています -->
+<script>
+  // JavaScriptのコード。ここでページの動作を定義します
+  export default (props, { $f7router, $f7route, $store, $on, $update }) => {
+    // 座標情報を取得します
+    const { lat, lng } = props;
+    // pageオブジェクトを定義します。ここに入力情報が保存されます
+    const page = {
+      lat: parseFloat(lat),
+      lng: parseFloat(lng),
+      image: undefined,
+    };
+
+    // ページが初期化されたときに呼ばれる関数を定義します
+    $on('pageInit', async () => {
+      // 逆ジオコーディングで座標から住所情報を取得します
+      page.address = await reverseGeoCoding(lat, lng);
+      // 描画を更新します
+      $update();
+    });
+
+    // 画像選択部分がクリックされたときに呼ばれる関数を定義します
+    const select = () => {
+      // 画像選択のinput要素をクリックします
+      $('form.note input[type=file]').click();
+    };
+
+    // 画像が選択されたときに呼ばれる関数を定義します
+    const change = (e) => {
+      // 選択されたファイルを取得します
+      const file = e.target.files[0];
+      // 選択された画像のURLを取得します
+      page.image = URL.createObjectURL(file);
+      // 描画を更新します
+      $update();
+    }
+
+    // 保存ボタンが押されたときに呼ばれる関数を定義します
+    const submit = async (e) => {
+      // フォームのデフォルトの送信動作をキャンセルします
+      e.preventDefault();
+      // Noteオブジェクトを作成します
+      const Note = ncmb.DataStore('Note');
+      const note = new Note;
+      // ジオポイントを作成します
+      const geo = new ncmb.GeoPoint(page.lat, page.lng);
+      // メモに座標、住所、テキストをセットします
+      note
+        .set('geo', geo)
+        .set('address', page.address)
+        .set('text', $('form.note textarea').val());
+      // 画像が選択されていれば画像もセットします
+      if (page.image) {
+        // 選択された画像のデータをBlob形式に変換します
+        const blob = await toBlob(page.image);
+        // ファイル名を一意な名前に変換します
+        const ext = blob.type.split('/')[1];
+        const name = Math.random().toString(32).substring(2);
+        const fileName = `${name}.${ext}`;
+        // ファイルをアップロードします
+        await ncmb.File.upload(fileName, blob);
+        // ファイル名をメモにセットします
+        note.set('image', fileName);
+      }
+      // メモを保存します
+      await note.save();
+      // 前のページに戻ります
+      $f7router.back();
+    }
+
+    // 画像のURLをBlob形式に変換する関数を定義します
+    const toBlob = async (uri) => {
+      // 画像のURLからデータを取得します
+      const res = await fetch(uri);
+      // データをBlob形式に変換します
+      const blob = await res.blob();
+      return blob;
+    };
+    // 描画を行います
+    return $render;
+  };
+</script>

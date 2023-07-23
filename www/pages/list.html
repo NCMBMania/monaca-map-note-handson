@@ -1,0 +1,63 @@
+<template>
+  <!-- ページ全体のレイアウトを定義 -->
+  <div class="page">
+    
+    <!-- ナビゲーションバーを定義 -->
+    <div class="navbar">
+      <!-- ナビゲーションバーの背景を定義 -->
+      <div class="navbar-bg"></div>
+      
+      <!-- ナビゲーションバーの内側部分を定義 -->
+      <div class="navbar-inner sliding">
+        <!-- ナビゲーションバーのタイトル部分を定義 -->
+        <div class="title">メモ一覧</div>
+      </div>
+    </div>
+    
+    <!-- ページの主要なコンテンツ部分を定義 -->
+    <div class="page-content">
+      <!-- メディアリストのブロック部分を定義 -->
+      <div class="list media-list">
+        <!-- メモの一覧を表示するためのリスト部分を定義 -->
+        <ul>
+          <!-- 各メモをリストアイテムとして表示する部分を定義 -->
+          <!-- この部分では、JavaScriptのmap関数を使用してnotes.value内の各noteに対して以下のHTMLを生成しています -->
+          ${ notes.value.map((note) => $h`
+            <!-- 各メモを表現するリストアイテム部分 -->
+            <li>
+              <!-- メモの内容を表示する部分 -->
+              <div class="item-content">
+                <!-- もしメモに添付された画像(blob)が存在するならば、それを表示する -->
+                ${ note.blob ?
+                  $h`<div class="item-media"><img src="${URL.createObjectURL(note.blob)}" width="44" /></div>` :
+                  ''
+                }
+                <!-- メモの内部情報を表示する部分 -->
+                <div class="item-inner">
+                  <!-- メモのタイトル部分と、メモの距離情報部分を表示する -->
+                  <div class="item-title-row">
+                    <!-- メモのタイトル部分 -->
+                    <div class="item-title">${note.text}</div>
+                    <!-- メモの距離情報部分 -->
+                    <div class="item-after">${distance(note.geo.latitude, note.geo.longitude, coords.value.lat, coords.value.lng)}m</div>
+                  </div>
+                </div>
+              </div>
+            </li>
+          `)}
+        </ul>
+      </div>
+    </div>
+  </div>
+</template>
+<script>
+  // このスクリプトはページの動作を定義します。
+  // Framework7の仕組みを使って、propsという引数を通じて親コンポーネントからデータを受け取り、
+  // $storeオブジェクトを利用しています。
+  export default async function (props, {$store }) {
+    // ストアからメモ(notes)と座標(coords)を取得します
+    const { notes, coords } = $store.getters;
+    // この関数の最後で、テンプレート部分をレンダリングします
+    return $render;
+  }
+</script>
