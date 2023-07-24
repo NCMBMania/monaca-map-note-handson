@@ -117,31 +117,6 @@
     const submit = async (e) => {
       // フォームのデフォルトの送信動作をキャンセルします
       e.preventDefault();
-      // Noteオブジェクトを作成します
-      const Note = ncmb.DataStore('Note');
-      const note = new Note;
-      // ジオポイントを作成します
-      const geo = new ncmb.GeoPoint(page.lat, page.lng);
-      // メモに座標、住所、テキストをセットします
-      note
-        .set('geo', geo)
-        .set('address', page.address)
-        .set('text', $('form.note textarea').val());
-      // 画像が選択されていれば画像もセットします
-      if (page.image) {
-        // 選択された画像のデータをBlob形式に変換します
-        const blob = await toBlob(page.image);
-        // ファイル名を一意な名前に変換します
-        const ext = blob.type.split('/')[1];
-        const name = Math.random().toString(32).substring(2);
-        const fileName = `${name}.${ext}`;
-        // ファイルをアップロードします
-        await ncmb.File.upload(fileName, blob);
-        // ファイル名をメモにセットします
-        note.set('image', fileName);
-      }
-      // メモを保存します
-      await note.save();
       // 前のページに戻ります
       $f7router.back();
     }

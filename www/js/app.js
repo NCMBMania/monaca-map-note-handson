@@ -8,7 +8,7 @@ document.addEventListener(event, async (e) => {
   // 設定ファイルを非同期で取得
   const config = await (await fetch('./js/config.json')).json();
   // NCMBのインスタンスを作成
-  window.ncmb = new NCMB(config.applicationKey, config.clientKey);
+  // window.ncmb = new NCMB(config.applicationKey, config.clientKey);
   // Framework7のインスタンスを作成
   window.app = new Framework7({
     name: 'My App', // アプリ名
